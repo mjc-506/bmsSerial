@@ -1,0 +1,777 @@
+First packet @ 250kbaud - FC 00 0E 11 80 30 F8 44 98
+         0123 4567
+    FC = 0011 1111 = Command frame, Broadcast without response, 16bit register addr, 4 bytes
+    00 0E = register addr. 0E = Devconfig
+    11 = 1000 1000 - Faults unlatched, Comp hyst disabled, OV & UV comparators enabled, address set autoaddressing, internal regulator enabled
+    80 = 0000 0001 - (Pwrconfig register) AFE_PCTL enabled (recommended setting)
+    30 F8 = 0000 1100  0001 1111 - (COMCONFIG register) 1 MBaud, UART enabled, Comm high enabled, Comm low enabled, Fault high enabled, Fault low enabled.
+    44 98 = Checksum
+    
+Now changes to 1Mbaud
+
+F9 00 0C 08 34 5A
+    F9 = 1001 1111 = Command frame, broadcast without response, 16bit register addr, 1 byte
+    00 0C = register - 0C = DEV_CTRL
+    08 = 0001 0000 - Auto address mode enabled
+    35 5A - checksum
+    
+F9 00 0A 00 36 3C
+    F9 = 1001 1111 = Command frame, broadcast, 16bit register addr, 1 byte
+    00 0A - Device address
+    00 - address set to 0
+    
+F9 00 0A 01 F7 FC
+    As above, but address set to 1 (the first module in the string has already received addr 0, and has stopped accepting addressing commands, so this gets passed to the next module)
+    
+... etc etc up until (including) addr 06 (7th module?!). All modules are now addressed in line. The slaves will actually accept addresses up to 0F/15 (ie, 16 modules in a string), the BMW host uc only allows up to 6. Assume the 06 address is either a typo, or a check to make sure that the last one fails (? Dunno...)
+
+Now the BMW uc checks which modules are on the bus.
+
+89 00 00 0A 00 DB 7F
+    89 = 1001 0001 - Command Frame, single device write with response, 16 bit reg addr, 1 byte
+    00 = Device address (0 - first module)
+    00 0A = read device address register (basically, this frame checks that there's a device at address 0)
+    00 = number of response bytes-1. 0.
+    DB 7F - checksum
+    
+00 00 00 00 response
+    00 = Response frame, 1 byte of data in response (0, + 1.)
+    00 = Data. The address was requested, and the address of the first module is 0.
+    00 00 - checksum
+    
+89 01 00 0A 00 DA 83
+    As above, but to address 01
+    
+00 01 C1 C0 response
+    As above, but with address 01
+    
+... and repeat until a request and response to address 05, then a request to 06, which goes unanswered.
+
+5ms later... Device config checks and setting
+
+EA 00 0D 05 04 8A 87
+    EA = 01010111 - Command frame, Broadcast write with response, 16bit reg addr, 2 bytes
+    00 0D - register 0D is number of channels (but 2 bytes also includes 0E - devconfig)
+    05 - Address of highest responder (6th module)
+    04 - number of response bytes-1. 5-1 = 4
+    8A 87 - Checksum
+    
+Large response, made up of 6 frames of (highest number module response first):
+04 10 11 80 30 F8 D1 11
+    04 - Number of response bytes - 1. 5 response bytes
+    10 = 00001000 - 16 channels enabled (0D)
+    11 = 10001000 - Faults unlatched, Comparator hyst disabled, OV and UV comparators enabled, address set autoaddressing, internal reg enabled (0E)
+    80 = 00000001 - AFE_PCTL enabled (0F)
+    30 F8 = 00001100 00011111 - (COMCONFIG register) 1 MBaud, UART enabled, Comm high enabled, Comm low enabled, Fault high enabled, Fault low enabled.
+    D1 11 - checksum
+    
+9D 05 00 0D 10 11 80 30 28 E4 BD - Turning off the high side comms and UART on the highest module
+    9D = 10111001 - Command byte, Single device without response, 16 bit reg addr, 5 bytes
+    05 - sixth module
+    00 0D - from register 0D
+    10 = 00001000 - 16 channels enabled
+    11 = 10001000 - Faults unlatched, Comparator hyst disabled, OV and UV comparators enabled, address set autoaddressing, internal reg enabled (0E)
+    80 = 00000001 - AFE_PCTL enabled (0F)
+    30 28 = 00001100 00010100 - (COMCONFIG register) 1 MBaud, UART disabled, Comm high disabled, Comm low enabled, Fault high disabled, Fault low enabled.
+    E4 BD - checksum
+    
+EA 00 0D 05 04 8A 87
+    EA = 01010111 - Command frame, Broadcast write with response, 16bit reg addr, 2 bytes
+    00 0D - register 0D is number of channels (but 2 bytes also includes 0E - devconfig)
+    05 - Address of highest responder (6th module)
+    04 - number of response bytes-1. 5-1 = 4
+    8A 87 - Checksum
+    
+Another large response, made up of 1 frame from the 6th module, then 5 frames from 1-5 (highest number module response first):
+04 10 11 80 30 28 xx xx - from the 6th module
+    04 - Number of response bytes - 1. 5 response bytes
+    10 = 00001000 - 16 channels enabled (0D)
+    11 = 10001000 - Faults unlatched, Comparator hyst disabled, OV and UV comparators enabled, address set autoaddressing, internal reg enabled (0E)
+    80 = 00000001 - AFE_PCTL enabled (0F)
+    30 28 = 00001100 00010100 - (COMCONFIG register) 1 MBaud, UART disabled, Comm high disabled, Comm low enabled, Fault high disabled, Fault low enabled.
+    xx xx - checksum
+    
+then 5 frames of
+04 10 11 80 30 F8 D1 11 from modules 5,4,3,2,1
+    04 - Number of response bytes - 1. 5 response bytes
+    10 = 00001000 - 16 channels enabled (0D)
+    11 = 10001000 - Faults unlatched, Comparator hyst disabled, OV and UV comparators enabled, address set autoaddressing, internal reg enabled (0E)
+    80 = 00000001 - AFE_PCTL enabled (0F)
+    30 F8 = 00001100 00011111 - (COMCONFIG register) 1 MBaud, UART enabled, Comm high enabled, Comm low enabled, Fault high enabled, Fault low enabled.
+    D1 11 - checksum
+    
+9D 04 00 0D 10 11 80 30 78 25 4D - Turning off the UART on the 5th module
+    9D = 10111001 - Command byte, Single device without response, 16 bit reg addr, 5 bytes
+    04 - 5th module
+    00 0D - from register 0D
+    10 = 00001000 - 16 channels enabled
+    11 = 10001000 - Faults unlatched, Comparator hyst disabled, OV and UV comparators enabled, address set autoaddressing, internal reg enabled (0E)
+    80 = 00000001 - AFE_PCTL enabled (0F)
+    30 78 = 00001100 00011110 - (COMCONFIG register) 1 MBaud, UART disabled, Comm high enabled, Comm low enabled, Fault high enabled, Fault low enabled.
+    25 4D - checksum
+    
+EA 00 0D 05 04 8A 87
+    EA = 01010111 - Command frame, Broadcast write with response, 16bit reg addr, 2 bytes
+    00 0D - register 0D is number of channels (but 2 bytes also includes 0E - devconfig)
+    05 - Address of highest responder (6th module)
+    04 - number of response bytes-1. 5-1 = 4
+    8A 87 - Checksum
+    
+Another large response..
+
+This repeats down to module 1, turning off the UART on modules 2 - 6, turning off high side comms on module 6, and low side comms on module 1.
+
+EA 00 13 05 00 EB 42
+    EA = 01010111 - Command frame, Broadcast write with response, 16bit reg addr, 2 bytes
+    00 13 - register - Balance configuration
+    05 - responses from modules 6 - 1
+    00 - 1 byte response required (1 byte - 1 = 0)
+    EB 42 - checksum
+    
+6 frames of:
+00 28 00 1E
+    00 - 1 byte of data
+    28 = 00010100 - Balance continues after a fault, balance continues for 1min following a balance command.
+    00 1E - checksum
+    
+EA 00 28 05 00 9A 8F
+    EA = 01010111 - Command frame, Broadcast write with response, 16bit reg addr, 2 bytes
+    00 28 - register - Communication timeout
+    05 - responses from modules 6 - 1
+    00 - 1 byte response required (1 byte - 1 = 0)
+    9A 8F - checksum
+    
+6 frames of:
+00 44 00 33
+    00 - 1 byte of data
+    44 = 00100010 - Modules will register a fault and shutdown 2 seconds after last communication frame is received (ie, no effective fault)
+    00 33 - checksum
+    
+EA 00 3E 05 00 7B 4B
+    EA = 01010111 - Command frame, Broadcast write with response, 16bit reg addr, 2 bytes
+    00 3E - register - Cell voltage and internal temp sampling interval
+    05 - responses from modules 6 - 1
+    00 - 1 byte response required (1 byte - 1 = 0)
+    7B 4B - checksum
+    
+6 frames of:
+00 CD C1 95
+    00 - 1 byte of data
+    CD = 10110011 - 200us for internal temp, 100us for cell voltages
+    C1 95 - checksum
+    
+EA 00 3F 05 05 EA 88
+    EA = 01010111 - Command frame, Broadcast write with response, 16bit reg addr, 2 bytes
+    00 3F - registers from aux sampling period
+    05 - responses from modules 6 - 1
+    05 - 6 bytes response required (6 byte - 1 = 5)
+    EA 88 - checksum
+    
+6 frames of:
+05 44 44 44 44 E9 CC B1 6B
+    05 - 6 bytes of data
+    44 44 44 44 = 00100010 00100010 00100010 00100010 - (aux sampling periods) everything set to 12.6us
+    E9 CC = 10010111 00110011 - (test sampling periods) Module monitor 500us, 4.5V analogue ref and VM 100us
+    B1 6B - checksum
+    
+EA 00 6B 05 01 AA 9B
+    EA = 01010111 - Command frame, Broadcast write with response, 16bit reg addr, 2 bytes
+    00 6B - register Chip fault masks
+    05 - responses from modules 6 - 1
+    01 - 2 bytes
+    AA 9B - checksum
+    
+6 frames of:
+01 80 00 30 00
+    01 - 2 bytes of data
+    80 00 = 00000001 00000000 - only mask user_cksum faults
+    30 00 - checksum
+    
+EA 00 6E 05 01 9A
+    as above... requesting fault output control registers
+    
+6 frames of:
+01 2C 00 4D 00
+    01 - 2 bytes
+    2C 00 = 00110100 00000000 - Only CMPOV_FAULT_OUT, CMPUV_FAULT_OUT and AUXUV_FAULT_OUT affect fault output
+    4D 00 - checksum
+    
+EA 00 78 05 03 DA 9F
+    as above, requesting GPIO direction, GPIO outputs, GPIO pullups, and GPIO pulldowns (4 bytes)
+    
+6 frames of:
+03 23 01 00 00 1E 44
+    03 - 4 bytes
+    23 = 11000100 - GPIOs 0, 1 and 5 are outputs, rest are inputs
+    01 = 10000000 - GPIO 0 is high, rest are low
+    00 = 00000000 - no pullups
+    00 = 00000000 - no pulldowns
+    1E 44 - checksum
+    
+EA 00 8C 05 01 1A AC
+    request comparator undervoltage thresholds and overvoltage thresholds (2 bytes)
+    
+6 frames of:
+01 44 B6 E3 76
+    01 - 2 bytes
+    44 = 00100010 - First bit is range. 0 is 0.7 to 3.875V. The rest is 25mV steps - 100010 is 34(dec) * 25mV = 850mV, plus 700mV = 1.55V
+    B6 = 01101101 - First bit is range. 0 is 2.0 to 5.175V. 1011011 is 91dec * 25mV = 2275mV, plus 2000mV = 4.275V
+    E3 76 - checksum
+    
+EA 00 92 05 01 7A AA
+    request AUX0 undervoltage threshold (2 bytes)
+    
+6 frames of:
+01 00 00 51 C0
+    01 - 2 bytes
+    00 00 - undervoltage thresholds set to 0
+    51 C0 - checksum
+    
+EA 00 94 05 07 1A A9
+    request for AUX0 OV, AUX1 UV, AUX1 OV, AUX2 UV thresholds(!) (8 bytes)
+    
+and repeated for the rest of the thresholds.
+
+UV thresholds are 0V, OV thresholds are 5V.
+
+EA 00 1E 05 01 BB 41
+    request Test configuration (2 bytes)
+    
+6 frames of:
+01 00 00 51 C0
+    01 - 2 bytes
+    00 00 - everything disabled
+    51 C0 - checksum
+    
+FA 00 1E 00 01 79 D2
+    FA = 01011111 - Command frame, Broadcast without response, 16 bit reg addr, 2 bytes
+    00 1E - Test configuration register
+    00 01 = 00000000 10000000 - MODULE_MOD_EN enabled
+    79 D2 - checksum
+
+EA 00 1E 05 01 BB 41
+    request test configuration (2bytes)
+    
+6 frames of:
+01 00 01 90 00
+    01 - 2 bytes
+    00 01 - MODULE_MOD_EN enabled
+    90 00 - checksum
+    
+EA 00 00 05 01 DB 47
+    request device version (2 bytes)
+    
+6 frames of:
+01 08 06 D6 02
+    01 - 2 byts
+    08 - Digital die version
+    06 - Analogue die version
+    D2 02 - Checksum
+    
+EA 00 BE 05 07 3B 61
+    request Device lot number (8 bytes)
+    
+6 frames of: (different lot numbers and checksum)
+07 00 00 35 15 05 00 1B 73 65 8F
+    07 - 8 bytes
+    00 00 35 15 05 00 1B 73 - device lot number
+    65 8F - checksum
+    
+EA 00 C6 05 01 3B 7A
+    request for device serial number
+
+6 frames of:
+01 00 00 51 C0
+    01 - 2 bytes
+    00 00 - serial number (all report the same)
+    51 C0 - checksum
+    
+EA 00 7C 05 00 DB 5F
+    request for GPIO input (1 byte)
+    
+6 frames of:
+00 01 C1 C0
+    00 - 1 bytes
+    01 - GPIO0 is high
+    C1 C0 - checksum
+    
+EA 00 FA 05 00 3A B6
+    request for EEPROM burn count (1 byte)
+    
+6 frames of:
+00 01 C1 C0
+    00 - 1 byte
+    01 - EEPROM has been burnt once
+    C1 C0 - checksum
+    
+EA 00 F0 05 03 5A B5
+    request for User checksum (4 bytes)
+    
+6 frames of:
+03 01 90 1F 00 4D E1 (each has different checksum and data)
+
+EA 00 33 05 02 6B 49
+    request for Auto monitor channel select (3 bytes, although this register has 4 bytes)
+    
+6 frames of:
+Seemingly random settings?
+
+EA 00 8E 05 00 7A AC
+    request for Cell UV thresholds (1 byte, although the register is 2 bytes)
+    
+6 frames of:
+00 0F 40 04
+    00 - 1 byte
+    0F = 11110000 - 2.4V???
+    40 04 - checksum
+    
+EA 00 37 05 00 AB 49
+    request for Auto monitor oversampling (1 byte)
+    
+6 frames of:
+00 78 00 22
+    00 - 1 byte
+    78 = 00011110 - Single sample, 5.96us sampling period, 12.6us sampling period (for specific things), average channels by sampling multiple times
+    00 22 - checksum
+    
+EA 00 C8 05 07 DA BB
+    request for scratch registers (8 bytes)
+    
+6 frames of:
+07 00 00 00 00 00 00 00 00 26 30
+    07 - 8 bytes,
+    000... nothing in the scratch registers
+    26 30 - checksum
+    
+EA 00 D2 05 01 7B 7E
+    request for Cell offset correction
+    
+6 frames, various offsets
+
+EA 00 D4 05 07 1B 7D
+    request for AUX0 offset correction (8 bytes, including aux0 - aux3)
+    
+6 frames, various offsets
+
+EA 00 DC 05 07 9A BF
+    request for AUX4 offset correction ( 8 bytes, including aux4 - aux7
+    
+6 frames, various offsets
+
+FB 00 51 FB 03 C0 74 26
+    FB = 11011111 - Command frame, Broadcast without response, 16 bit reg addr, 3 bytes
+    00 51 - Device status register (1 byte) and fault summary (2 bytes)
+    FB = 11011111 - SYS_INIT, reset COMM_RESET, COMM_CLEAR, STACK_FAULT_DET.
+    03 C0 = 11000000 00000011 - reset GPI_FAULT, CHIP_FAULT, SYS_FAULT, COMM_FAULT, CMPOV_FAULT, CMPUV_FAULT, AUXOV_FAULT, AUXUV_FAULT, OV_FAULT, UV_FAULT sums.
+    74 26 - checksum
+    
+~1.75ms later...
+
+9B 00 00 13 28 00 00 AE 45
+    9B = 11011001 - Command write, single device write no response, 16 bit reg addr, 3 bytes
+    00 - first module
+    00 13 - write to balance configuration (1 byte), then balance enable (2 bytes)
+    28 = 00010100 - Balancing continues on fault, balance continues for 1 minute after last balancing command
+    00 00 - balancing disabled on all channels
+    AE 45 - checksum
+    
+9B 01 00 13 28 00 00 AF 94
+    9B = 11011001 - Command write, single device write no response, 16 bit reg addr, 3 bytes
+    01 - second module
+    00 13 - write to balance configuration (1 byte), then balance enable (2 bytes)
+    28 = 00010100 - Balancing continues on fault, balance continues for 1 minute after last balancing command
+    00 00 - balancing disabled on all channels
+    AF 94 - checksum
+    
+... repeating for all six modules
+
+EA 00 13 05 02 6A 83
+    request for balancing config for modules 6 - 1
+    
+6 frames of:
+02 28 00 00 81 B0
+    02 = 3 bytes
+    28 = 00010100 - Balancing continues on fault, balance continues for 1 minute after last balancing command
+    00 00 - balancing disabled on all channels
+    81 B0 - checksum
+    
+99 00 00 28 44 02 2F
+    99 = 10011001 - Command frame, Single device write no response, 16 bit reg, 1 byte
+    00 - first module
+    00 28 - Communication timeout register (1 byte)
+    44 = 00100010 - modules will power down 2 seconds after last comm (and also set a fault at 2 secs, but they'll be shutting down, so...)
+    02 2F - checksum
+    
+and repeated for all six modules
+
+EA 00 28 05 00 9A 8F
+    requesting comm reset register from all modules (1 byte)
+    
+6 frames of:
+00 44 00 33
+    00 - 1 byte
+    44 = 00100010 - modules will power down 2 seconds after last comm
+    00 33 - checksum
+    
+EA 00 79 05 00 CB 5E
+    request for GPIO outputs (1 byte)
+    
+6 frames of:
+00 01 C1 C0
+    00 - 1 byte
+    01 - GPIO0 high
+    C1 C0 - checksum
+    
+99 00 00 79 01 FE 4C
+    99 = 10011001 - Command frame, Single device write no response, 16 bit reg, 1 byte
+    00 - first module
+    00 79 - GPIO outputs (1 byte)
+    01 - GPIO0 high, the rest low
+    FE 4C - checksum
+    
+repeated for the rest of the 6 modules, apart for the 6th module, which sets GPIO0 and GPIO5 high.
+
+EA 00 79 05 00 CB 5E
+    Another request for GPIO outputs (1 byte)
+
+and another 6 frames showing GPIO0 high, with GPIO5 also high on the last module.
+
+EE 00 02 05 00 FF 00 00 82 16 44
+    EE = 01110111 - Command frame, Broadcast write with response, 16 bit reg addr, 6 bytes
+    00 02 - Command register (1 byte), Channel select (4 bytes), Command oversampling (1 byte)
+    05 - Bits 0-4 set the highest module address to respond - 6th module. Synchronously sample channels
+    00 FF 00 00 - 00000000 11111111 00000000 00000000 - sample cells 1 - 8
+    82 = 01000001 - ??? 4 samples are averaged, 4.13us sampling period, set CMD_OVS_PERIOD to 001, which is reserved?
+    16 44 - checksum
+
+0F B2 2B B2 27 B2 36 B2 2E B2 2B B1 FF B2 2D B2 15 59 E5 - 6th module response
+    0F - 16 bytes data
+    B2 2B - cell 8 - 4.5611V? NOO!! data/65535 * 5V = 3.4788V, makes more sense...
+    rest of the data is similar
+    59 E5 - checksum
+and repeated for the remaining 5 modules
+    
+EE 00 02 05 FF 00 00 00 82 32 44
+    similar request, but for cells 9 - 16
+    
+0F B2 37 B2 3B B2 2A B2 3C B2 42 B2 2F B2 32 B2 24 1D 75
+    0F - 16 bytes
+    B2 37 - cell 16 - 4.5623V?  No - 3.481V
+    etcetc
+    
+FA 00 6E 20 00 A0 09
+    FA = 01011111 - Command, broadcast without response, 2 bytes data
+    00 6E - fault output control (2 bytes)
+    00 A0 = 00000000 00000101 - AUX_UV and UV fault outputs
+    A0 09 - checksum
+    
+FA 00 1E 00 11 78 1E
+    FA - Command, broadcast no response, 2 bytes data
+    00 1E - Test configuration (2bytes)
+    00 11 = 00000000 10001000 - module_mod and squeeze enabled
+    
+FA 00 14 55 55 6 7F
+    00 14 - balancing enable (2 bytes)
+    55 55 = cells 0, 2, 4, 6, 8, 10, 12, 14 enabled (actually squeeze testing then)
+    
+EE 00 02 05 00 00 FF 02 80 96 C1
+    EE = 01110111 - Command frame, Broadcast write with response, 16 bit reg addr, 6 bytes
+    00 02 - command register
+    05 - data from all 6 modules
+    00 00 FF 02 - Get module voltage and all aux channels
+    80 - 2 samples averaged
+    
+11 97 13 0A F7 A8 F5 EE 3F 00 08 67 40 67 DA 67 34 71 DB A2 84
+    11 - 18 bytes
+    97 13 - Aux7 2.951V
+    0A F7 - Aux6 0.214V
+    A8 F5 - Aux5 3.300V
+    EE 3F - Aux4 4.653V
+    00 08 - Aux3 0.001V
+    67 40 - Aux2 2.017V
+    67 DA - Aux1 2.028V
+    67 34 - Aux0 2.085V
+    71 DB - Module voltage 29147? ~55.7V?
+etc etc
+    
+EE 00 02 05 00 FF 00 00 80 97 85
+    request for cells 1-8 voltages
+    then turn off squeeze
+
+0F B8 F7 AB 5B.....
+    These voltages are affected by 'squeeze' (open wire detection), so should be ignored?
+    
+EE 00 02 05 FF 00 00 00 80 DB 85
+    similar request for cells 9 - 16
+    
+0F B5 9A AB 61......
+    as above, affected by squeeze. But there are no zeros, which would indicate an open wire.
+    
+FA 00 14 AA AA 66 CF
+    enable balancing/squeeze(?) on the other cells in each module
+    
+EE 00 02 05 00 00 00 E7 80 EC 61
+    request for VM (-5V), Module, 4.5V ref, 1.8V ref, Ana and dig die temps.
+    
+0D 7E E0 62 5F 5A C0 E5 19 00 14 71 B4 00 18 DB 89
+    0D - 14 bytes
+    7E E0 - digital die temp? 32480
+    62 5F - analog die temp? 25183
+    5A C0 - 1.8V ref? 23232 = 1.7725V
+    E5 19 - 4.5V ref? 58649 = 4.4746V
+    00 14 - Module voltage? 00020
+    71 B4 - -5V ref? 29108
+    00 18 - ??? 00024
+    
+EE 00 02 05 00 FF 00 00 80 97 85
+    request for cells 1-8 voltages
+    
+0F AB 61 B8 F9....
+    Cells 8 - 1, but affected by 'squeeze'
+    
+EE 00 02 05 FF 00 00 00 80 B3 85
+    and again for cells 16 - 9
+    
+0F AB 63 B9 08 ....
+    cells 16 - 9, affected by 'squeeze'
+    
+FA 00 14 00 00 98 10
+    disable balancing/squeeze on all cells.
+    
+FA 00 1E 00 01 72 D2
+    Enable module voltage
+    
+FA 00 6E 2C 00 A5 09
+    enable CMPOV, CMPUV, AUXUV faults
+    
+EA 00 51 05 11 8B 5A
+    request for device status (1 byte) and fault summary (half of 2 bytes)
+    18 bytes requested
+    
+11 00 00 00 00 00...
+    no faults...
+    
+EA 00 00 05 01 AA 55
+    Request die version numbers?
+
+immediately followed by
+
+EA 00 5E 05 01 BA 95
+    request for communications fault (2 bytes)
+    
+6 frames of:
+01 00 40 50 30
+    01 - 2 bytes data
+    00 40 = 00000000 00000010 - probably version numbers
+    50 30 - checksum
+    
+FB 00 51 FB 03 C0 74 26
+    FB = 11011111 - command frame, broadcast no response, 16 bit reg addr, 3 bytes data
+    00 51 - device status (1 byte) and fault summary (2 bytes)
+    FB - reset everything apart from STACK_FAULT_DET
+    03 C0 - reset GPI_FAULT_SUM, CHIP_FAULT_SUM, SYS_FAULT_SUM, COMM_FAULT_SUM
+    74 26 - checksum
+    
+EA 00 14 05 01 9B 43
+    request balancing enable reg (2 bytes)
+    
+6 frames of 
+01 00 00 51 C
+    no balancing enabled
+    
+EA 00 F4 05 03 1B 74
+    request checksum readout (4 bytes)
+    
+6 frames of checksum readout...
+
+EE 00 02 05 00 01 00 00 80 A6 6D
+    EE = 01110111 - Command frame, Broadcast with response, 16bit reg addr, 6 bytes data
+    00 02 - command register (1 byte), channel select (4 bytes), oversamping (1 byte)
+    05 - get data from all modules
+    00 01 00 00 -get cell 1 voltage only?
+    80 - CMD_OVS_CYCLE = 1?
+    
+6 frames of:
+01 B2 14 25 6F
+    01 - 2 bytes
+    B2 14  - 3.4788V
+    25 6F - checksum
+    
+EA 00 5A 05 03 7A 95
+    request comp UV fault (2 bytes), comp OV fault (2 bytes)
+    
+6 frames of
+03 00 00 00 00 44 00
+    4 bytes, no faults
+    
+9A 00 00 8C 81 6E 3D AD
+    Single device read request, 2 bytes
+    00 - first module
+    00 8C - Comparator UV threshold (1 byte), OV threshold (1 byte)
+    81 - 3600mV? (bit0 set, self test?)
+    6E - 1425mV? (bit0 set, self test?)
+    
+and repeated for the other modules
+
+EA 00 5A 05 03 7A 95
+    request comp UV fault (2 bytes) OV fault (2 bytes)
+    
+6 frames of
+03 FF FF FF FF 45 94
+    03 - 4 bytes
+    FF FF FF FF - all the faults!
+    
+9A 00 00 8C 44 B6 6E A7
+    single device read request, 2 bytes
+    00 - first module
+    00 8C - Comparator UV threshold (1 byte), OV threshold (1 byte)
+    44 - UV threshold - 2200mV? (bit0 set)
+    B6 - OV threshold - 2050mV? (bit0 set)
+    6E A7 - checksum
+    
+EE 00 02 05 00 02 00 00 80 A6 29
+    EE = 01110111 - Command frame, Broadcast write with response, 16 bit reg addr, 6 bytes
+    00 02 - Command register (1 byte), Channel select (4 bytes), Command oversampling (1 byte)
+    05 - Bits 0-4 set the highest module address to respond - 6th module. Synchronously sample channels
+    00 02 00 00 - 00000000 01000000 00000000 00000000 - sample cell 7?
+    80 = 00000001 - ???
+    A6 29 - checksum
+    
+6 frames of
+01 B2 28 25 7E
+    01 - 2 bytes
+    B2 2B - 3.4799V
+    25 7E - checksum
+    
+EA 00 5A 05 03 7A 95
+    request comp UV fault (2 bytes), comp OV fault (2 bytes)
+    
+6 frames of
+03 00 00 00 00 44 00
+    4 bytes, no faults
+    
+9A 00 00 8C 81 6E 3D AD
+    Single device read request, 2 bytes
+    00 - first module
+    00 8C - Comparator UV threshold (1 byte), OV threshold (1 byte)
+    81 - 3600mV? (bit0 set, self test?)
+    6E - 1425mV? (bit0 set, self test?)
+    
+and repeated for the other modules
+
+EA 00 5A 05 03 7A 95
+    request comp UV fault (2 bytes) OV fault (2 bytes)
+    
+6 frames of
+03 FF FF FF FF 45 94
+    03 - 4 bytes
+    FF FF FF FF - all the faults!
+    
+9A 00 00 8C 44 B6 6E A7
+    single device read request, 2 bytes
+    00 - first module
+    00 8C - Comparator UV threshold (1 byte), OV threshold (1 byte)
+    44 - UV threshold - 2200mV? (bit0 set)
+    B6 - OV threshold - 2050mV? (bit0 set)
+    6E A7 - checksum
+    
+EE 00 02 05 00 04 00 00 80 A6 29
+    EE = 01110111 - Command frame, Broadcast write with response, 16 bit reg addr, 6 bytes
+    00 02 - Command register (1 byte), Channel select (4 bytes), Command oversampling (1 byte)
+    05 - Bits 0-4 set the highest module address to respond - 6th module. Synchronously sample channels
+    00 02 00 00 - 00000000 00100000 00000000 00000000 - sample cell 6?
+    80 = 00000001 - ???
+    A6 29 - checksum
+    
+6 frames of
+01 B2 28 25 7E
+    01 - 2 bytes
+    B2 2B - 3.4799V
+    25 7E - checksum
+    
+EA 00 5A 05 03 7A 95
+    request comp UV fault (2 bytes), comp OV fault (2 bytes)
+    
+6 frames of
+03 00 00 00 00 44 00
+    4 bytes, no faults
+    
+repeating for the rest of the cells
+
+99 00 00 79 00 3F 8C
+    99 = 10011001 - Command frame, Single device write no response, 16 bit reg, 1 byte
+    00 - first module
+    00 79 - GPIO outputs (1 byte)
+    00 - all off
+    3F 8C - checksum
+    
+EA 00 79 05 00 CB 5E
+    request GPIO outputs (1byte)
+    
+6 frames of
+00 00 00 00
+    GPIOs all off
+    
+EE 00 02 05 80 01 00 00 82 26 72
+    EE = 01110111 - Command frame, Broadcast write with response, 16 bit reg addr, 6 bytes
+    00 02 - Command register (1 byte), Channel select (4 bytes), Command oversampling (1 byte)
+    05 - Bits 0-4 set the highest module address to respond - 6th module. Synchronously sample channels
+    80 01 00 00 - 00000001 10000000 00000000 00000000 - sample cells 8 and 9
+    82 = 01000001 - ??? 4 samples are averaged, 4.13us sampling period, set CMD_OVS_PERIOD to 001, which is reserved?
+    26 72 - checksum
+    
+6 frames of
+03 B2 35 B2 17 47 D8
+    4 bytes (2 readings) of cell voltages
+repeated for the other modules
+
+99 00 00 79 03 7F 8D
+    99 = 10011001 - Command frame, Single device write no response, 16 bit reg, 1 byte
+    00 - first module
+    00 79 - GPIO outputs (1 byte)
+    03 - GPIO0 and 1 on
+    7F 8D - checksum
+repeated for the other modules
+    
+EA 00 79 05 00 CB 5E
+    request GPIO outputs (1byte)
+    
+6 frames of
+00 03 40 01
+    GPIOs 0 and 1 on
+    
+EE 00 02 05 80 01 00 00 82 26 72
+    EE = 01110111 - Command frame, Broadcast write with response, 16 bit reg addr, 6 bytes
+    00 02 - Command register (1 byte), Channel select (4 bytes), Command oversampling (1 byte)
+    05 - Bits 0-4 set the highest module address to respond - 6th module. Synchronously sample channels
+    80 01 00 00 - 00000001 10000000 00000000 00000000 - sample cells 8 and 9
+    82 = 01000001 - ??? 4 samples are averaged, 4.13us sampling period, set CMD_OVS_PERIOD to 001, which is reserved?
+    26 72 - checksum
+    
+6 frames of
+03 B2 35 B2 17 47 D8
+    4 bytes (2 readings) of cell voltages
+repeated for the other modules
+
+99 00 00 79 01 FE 4C
+    99 = 10011001 - Command frame, Single device write no response, 16 bit reg, 1 byte
+    00 - first module
+    00 79 - GPIO outputs (1 byte)
+    01 - GPIO0 high, the rest low
+    FE 4C - checksum
+    
+repeated for the rest of the 6 modules, apart for the 6th module, which sets GPIO0 and GPIO5 high.
+
+EA 00 79 05 00 CB 5E
+    Another request for GPIO outputs (1 byte)
+
+and another 6 frames showing GPIO0 high, with GPIO5 also high on the last module.
+
+EA 00 79 05 00 CB 5E
+    Another request for GPIO outputs (1 byte)
+
+and another 6 frames showing GPIO0 high, with GPIO5 also high on the last module.
+
+A lot of this repeats ad infinitum...
+
+GPIO 0, 1 and 5 are set and cleared. These seem to be unpopulated on the boards (LEDs for dev?)
