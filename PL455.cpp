@@ -10,19 +10,110 @@
 #include "PL455.h"
 
 //PL455 register settings
+const byte REG03[4] = { 0b00000010, 0b11111111, 0b11111111, 0b11111111}; //sample all cells, all aux, and vmodule
 const byte REG07[1] = { 0b01111000}; //sample multiple times on same channel, 12.6us sampling, no averaging
 const byte REG0C[1] = { 0b00001000}; //start autoaddressing
 const byte REG0D[1] = { 16}; //16 battery cells
 const byte REG0E[1] = { 0b00011001}; //internal reg enabled, addresses set by autoaddressing, comparators disabled, hysteresis disabled, faults unlatched
 const byte REG0F[1] = { 0b10000000}; //AFE_PCTL enabled (recommended by TI)
 const byte REG13[1] = { 0b10001000}; //balance continues up to 1 second following balancing enable, balancing continues through fault
-const byte REG1E[2] = { 0b00000000, 0b00000001}; //enable module voltage readings
-const byte REG28[1] = { 0b11000000}; //shutdown module 1 second after last comm
+const byte REG1E[2] = { 0b00000001, 0b00000000}; //enable module voltage readings
+const byte REG28[1] = { 0x55}; //shutdown module 5 seconds after last comm
 const byte REG32[1] = { 0b00000000}; //automonitor off
 
 //PL455::PL455(bmsbaud) {
 //  //init(bmsbaud); //don't init in the constructor - called before setup()
 //}
+
+void PL455::commReset(bool reset) { //performs comms break or reset
+  pinMode(1, OUTPUT);
+  if (reset == 0) { //comms break
+    //hold TX low for 12 bit periods
+    unsigned long lowTime = 12000000/setBaud;
+    digitalWrite(1, LOW);
+    delayMicroseconds(lowTime);
+    digitalWrite(1, HIGH);
+  } else { //comms reset
+    //hold TX low for at least 200usec
+    digitalWrite(1, LOW);
+    delayMicroseconds(300);
+    digitalWrite(1, HIGH);
+  }
+}
+
+void PL455::findMinMaxCellVolt() { //goes through the cell voltages finding the min, max, difference
+  minCellVoltage = 65535;
+  maxCellVoltage = 0;
+  for (byte module = 0; module < numModules; module++) {
+    for (byte cell = 0; cell < 16; cell++) {
+      uint16_t cellVolt = cellVoltages[module][cell];
+      if (cellVolt > CELL_IGNORE_VOLT) { //only process connected cells
+        if (cellVolt > maxCellVoltage) {
+          maxCellVoltage = cellVolt;
+        }
+        if (cellVolt < minCellVoltage) {
+         minCellVoltage = cellVolt;
+        }
+      }
+    }
+  }
+  difCellVoltage = maxCellVoltage - minCellVoltage;
+//  CONSOLE.print("min: ");
+//  CONSOLE.print(minCellVoltage);
+//  CONSOLE.print(" max: ");
+//  CONSOLE.print(maxCellVoltage);
+//  CONSOLE.print(" diff: ");
+//  CONSOLE.println(difCellVoltage);
+}
+
+void PL455::chooseBalanceCells() { //works out which cells need balancing
+  for (int module = 0; module < numModules; module++) {
+    for (int cell = 0; cell < 16; cell++) {
+      if ((cellVoltages[module][cell] > minCellVoltage + BALANCE_TOLERANCE) && ((cellVoltages[module][cell] > BALANCE_MIN_VOLT) || ((BALANCE_WHILE_CHARGE == 1) && (1==1)))) { //replace 1==1 with a 'charging' variable
+        balanceCells[module][cell] = 1;
+      } else {
+        balanceCells[module][cell] = 0;
+      }
+    }
+  }
+}
+
+bool PL455::getBalanceStatus(byte module, byte cell) { //returns 1 if the cell is balancing
+  return balanceCells[module][cell];
+}
+
+uint16_t PL455::adc2volt(uint16_t adcReading) { //converts ADC readings into voltage, 10ths of a millivolt
+  uint32_t voltage = (uint32_t(50000) * uint32_t(adcReading)) / uint32_t(65535);
+  return uint16_t(voltage);
+}
+
+uint16_t PL455::getModuleVoltage(byte module) { //provides the overall voltage of the chosen module, in hundredths of a volt
+  uint16_t moduleADC = moduleVoltages[module];
+  uint32_t moduleVolts = (uint32_t(12500) * uint32_t(moduleADC)) / uint32_t(65535);
+  return uint16_t(moduleVolts);
+}
+
+uint16_t PL455::getCellVoltage(byte module, byte cell) { //provides cell voltage, in 10ths of a millivolt
+  uint16_t cellVolts = PL455::adc2volt(cellVoltages[module][cell]);
+  return cellVolts;
+}
+
+uint16_t PL455::getAuxVoltage(byte module, byte aux) { //provides aux input voltage, in 10ths of a millivolt
+  uint16_t auxVolts = PL455::adc2volt(auxVoltages[module][aux]);
+  return auxVolts;
+}
+
+uint16_t PL455::getMinCellVoltage() {
+  uint16_t minVolt = PL455::adc2volt(minCellVoltage);
+  return minVolt;
+//  return minCellVoltage;
+}
+
+uint16_t PL455::getDifCellVoltage() {
+  uint16_t difVolt = PL455::adc2volt(difCellVoltage);
+  return difVolt;
+//  return difCellVoltage;
+}
 
 byte PL455::getInitFrame(byte _readWrite, byte scope, byte data_size) {
   byte initFrame=0; //variables for the initialization frame
@@ -113,7 +204,7 @@ void PL455::writeRegister(byte scope, byte device_addr, byte register_addr, byte
       break;
   }
   for(byte i=0; i<data_size; i++) {
-    frame[frameSize - data_size + i] = data[i];
+    frame[frameSize - data_size + i] = data[data_size - i - 1];
   }
   send_Frame(frame, frameSize);
 }
@@ -164,29 +255,32 @@ void PL455::readRegister(byte scope, byte device_addr, byte group_id, byte regis
 }
 
 void PL455::init(uint32_t bmsbaud) { //'bmsbaud' sets the baud once running - the first frame is always 250000baud.
+  bmsSteps = 100/(100-BALANCE_DUTYCYCLE); //managed balancing/voltage measurement
+  bmsStepPeriod = BMS_CYCLE_PERIOD/bmsSteps;
+  PL455::commReset(1);
   BMS.begin(250000);
   delay(100);
   byte baudsetting = 1; //keep to 250k in case of errors
   switch(bmsbaud) {
     case 125:
     case 125000:
-      bmsbaud = 125000;
+      setBaud = 125000;
       baudsetting = 0;
       break;
     case 250:
     case 250000:
-      bmsbaud = 250000;
+      setBaud = 250000;
       baudsetting = 1;
       break;
     case 500:
     case 500000:
-      bmsbaud = 500000;
+      setBaud = 500000;
       baudsetting = 2;
       break;
     case 1:
     case 1000:
     case 1000000:
-      bmsbaud = 1000000;
+      setBaud = 1000000;
       baudsetting = 3;
       break;
     default:
@@ -199,8 +293,8 @@ void PL455::init(uint32_t bmsbaud) { //'bmsbaud' sets the baud once running - th
   commdata[1] = baudsetting << 4; //set UART baud
   writeRegister(SCOPE_BRDCST, 0, 0x10, commdata, 2);
   BMS.flush(); //give time for the serial to be sent
-  BMS.begin(bmsbaud);
-  delay(10);
+  BMS.begin(setBaud);
+  delayMicroseconds(20); //at least 10usec
   configure(); //general config
   setAddresses();
   //now do per-device configuration
@@ -242,6 +336,8 @@ void PL455::configure() {
   delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x32, REG32, 1);
   delay(10);
+  writeRegister(SCOPE_BRDCST, 0, 0x03, REG03, 4);
+  delay(10);
 }
 
 int PL455::getNumModules() {
@@ -258,7 +354,8 @@ void PL455::setAddresses() {
   //all modules will now have an address. Now we check with each one until we get no response.
   elapsedMillis timeout;
   byte checkModule = 0;
-  while(timeout < 100) { //allow 100ms for each module to respond. This should be more than enough!!!
+  while(timeout < 1000) { //allow 1000ms for each module to respond. This should be more than enough!!!
+    PL455:listenSerial();
     if ((!sentRequest) && (checkModule != MAX_MODULES)) { //haven't sent our request yet, but don't ask for addresses > 15 (16th module)
       readRegister(SCOPE_SINGLE, checkModule, 0, 0x0A, 1); //read address of module
       timeout = 0; //don't include time taken to send request
@@ -278,6 +375,7 @@ void PL455::setAddresses() {
     } //otherwise, we have sent a request, but haven't received a response yet
   }
   //timed out waiting for response, last module must have been the highest address
+  CONSOLE.println("Received no further responses from modules.");
   numModules = checkModule;
 }
 
@@ -301,21 +399,25 @@ void PL455::send_Frame(byte *message, int messageLength) {
   }
   toSend[messageLength] = CRC & 0x00FF;
   toSend[messageLength+1] = (CRC & 0xFF00) >> 8;
-  CONSOLE.print("Sending 0x");
+//  CONSOLE.print("Sending 0x");
   for (int i=0; i<messageLength+2; i++) {
     BMS.write(toSend[i]);
-    if(toSend[i]<0x10) {
-      CONSOLE.print("0");
-    }
-    CONSOLE.print(toSend[i], HEX);
-    CONSOLE.print(" ");
+//    if(toSend[i]<0x10) {
+//      CONSOLE.print("0");
+//    }
+//    CONSOLE.print(toSend[i], HEX);
+//    CONSOLE.print(" ");
   }
-  CONSOLE.println();
+//  CONSOLE.println();
   BMS.flush();
+  delay(1);
 }
 
-void PL455::serialEvent1() //captures all the serial RX
-{
+void PL455::listenSerial() {
+  PL455:serialEvent1();
+}
+
+void PL455::serialEvent1() { //captures all the serial RX
   while(BMS.available() > 0)
   {
     byte inByte = BMS.read();
@@ -326,8 +428,9 @@ void PL455::serialEvent1() //captures all the serial RX
         byte numBytes = inByte & 0b01111111;
         if((respbyte == 0) && (numBytes <= 128)) { //probably a response byte
           serialRXbuffer[0] = inByte;
-          bytesToReceive = numBytes+1; //number of data bytes to receive. Also receive the init byte, plus two CRC bytes
+          bytesToReceive = numBytes+1; //number of _data_ bytes to receive. Also receive the init byte, plus two CRC bytes
           bytesReceived = 1;
+          rxInProgress = 1;
         } else { //not a response byte - void
           rxInProgress = 0;
           bytesToReceive = 0;
@@ -339,13 +442,13 @@ void PL455::serialEvent1() //captures all the serial RX
       }
       if (bytesReceived == bytesToReceive + 3) { //received complete frame
         byte completeFrame[bytesReceived];
-        CONSOLE.print("Received 0x");
+//        CONSOLE.print("Received 0x");
         for (int i=0; i<bytesReceived; i++) {
           completeFrame[i] = serialRXbuffer[i]; //copy frame to new array
-          CONSOLE.print(completeFrame[i], HEX);
-          CONSOLE.print(" ");
+//          CONSOLE.print(completeFrame[i], HEX);
+//          CONSOLE.print(" ");
         }
-        CONSOLE.println();
+//        CONSOLE.println();
         if ( CRC16(completeFrame, bytesReceived) == 0) { //CRC checks ok
           waitingForResponse = 0;
           rxInProgress = 0;
@@ -355,6 +458,81 @@ void PL455::serialEvent1() //captures all the serial RX
           bytesToReceive = 0;
           bytesReceived = 0;
         }
+      }
+    }
+  }
+}
+
+void PL455::runBMS() { //called frequently from main()
+  PL455::listenSerial();
+  if (micros() - bmsStepPeriod > bmsStepTime) {
+    if (bmsStep == 0) { //first step - turn off balancing
+      byte balanceDisable[2] = {0, 0};
+      PL455::writeRegister(SCOPE_BRDCST, numModules-1, 0x14, balanceDisable, 2);
+      bmsStepTime = micros();
+      bmsStep++;
+    } else if (bmsStep == 1) { //second step, read voltages
+      //PL455::readRegister(byte scope, byte device_addr, byte group_id, byte register_addr, byte bytesToReturn);
+      if (voltsRequested == 0) { //nothing requested yet
+        PL455::readRegister(SCOPE_SINGLE, voltsRequested, 0, 0x02, 1); //slightly abuse the readRegister function to send a command
+        voltsRequested++;
+      } else if (waitingForResponse == 0) { //received a response
+        //reset flags
+        registerRequested = 0;
+        deviceRequested = 0;
+        scopeRequested = 0;
+        sentRequest = 0;
+        //read response
+        for (unsigned int cell=0; cell<16; cell++) {
+          uint16_t reading;
+          reading = (serialRXbuffer[2*cell + 1] << 8) | serialRXbuffer[2*cell + 2];
+          cellVoltages[voltsRequested-1][15-cell] = reading;
+        }
+        for (unsigned int aux=0; aux<8; aux++) {
+          uint16_t reading;
+          reading = (serialRXbuffer[2*aux + 33] << 8) | serialRXbuffer[2*aux + 34];
+          auxVoltages[voltsRequested-1][7-aux] = reading;          
+        }
+        moduleVoltages[voltsRequested-1] = (serialRXbuffer[49] << 8) | serialRXbuffer[50];
+        if(voltsRequested == numModules) {// received the last module data
+          voltsRequested = 0;
+          //update data
+          PL455::findMinMaxCellVolt();
+          PL455::chooseBalanceCells();
+          //reset flags
+          bmsStepTime = micros();
+          bmsStep++;
+        } else {
+          PL455::readRegister(SCOPE_SINGLE, voltsRequested, 0, 0x02, 1);
+          voltsRequested++; //don't reset the step timer - make sure this happens as quick as possible
+        }
+        //turn balancing back on
+        for (unsigned int module=0; module<numModules; module++) {
+          byte balanceEnable[2] = {0, 0};
+          for (unsigned int cell=0; cell<8; cell++) {
+            balanceEnable[0] = balanceEnable[0] | (balanceCells[module][cell] << cell);
+          }
+          for (unsigned int cell=8; cell<16; cell++) {
+            balanceEnable[1] = balanceEnable[1] | (balanceCells[module][cell] << cell);
+          }
+          PL455::writeRegister(SCOPE_SINGLE, module, 0x14, balanceEnable, 2);
+        }
+      }
+    } else { //other steps, keep balancing on
+      for (unsigned int module=0; module<numModules; module++) {
+        byte balanceEnable[2] = {0, 0};
+        for (unsigned int cell=0; cell<8; cell++) {
+          balanceEnable[0] = balanceEnable[0] | (balanceCells[module][cell] << cell);
+        }
+        for (unsigned int cell=8; cell<16; cell++) {
+          balanceEnable[1] = balanceEnable[1] | (balanceCells[module][cell] << cell);
+        }
+        PL455::writeRegister(SCOPE_SINGLE, module, 0x14, balanceEnable, 2);
+      }
+      bmsStepTime = micros();
+      bmsStep++;
+      if (bmsStep >= bmsSteps) {
+        bmsStep = 0;
       }
     }
   }

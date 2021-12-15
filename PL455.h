@@ -1,4 +1,4 @@
-/* Library for the TI bq76PL455A 16 cell BMS chip,
+/*  Library for the TI bq76PL455A 16 cell BMS chip,
  *  talking over UART. Written using the TI datasheet
  *  and scoping a BMW PHEV battery pack using this
  *  BMS.
@@ -20,17 +20,29 @@ class PL455
 {
   public:
 //    PL455;
-    void send_Frame(byte *message, int messageLength);
-    void writeRegister(byte scope, byte device_addr, byte register_addr, byte *data, byte data_size);
-    void readRegister(byte scope, byte device_addr, byte group_id, byte register_addr, byte bytesToReturn);
     void init(uint32_t bmsbaud);
-    void configure();
-    int getNumModules();
-    void setAddresses();
     void serialEvent1();
+    uint16_t getModuleVoltage(byte module);
+    uint16_t getCellVoltage(byte module, byte cell);
+    uint16_t getAuxVoltage(byte module, byte aux);
+    int getNumModules();
+    uint16_t getMinCellVoltage();
+    uint16_t getDifCellVoltage();
+    void runBMS();
+    bool getBalanceStatus(byte module, byte cell);
   private:
     uint16_t CRC16(byte *pBuf, int nLen);
     byte getInitFrame(byte _readWrite, byte scope, byte data_size);
+    uint16_t adc2volt(uint16_t adcReading);
+    void send_Frame(byte *message, int messageLength);
+    void writeRegister(byte scope, byte device_addr, byte register_addr, byte *data, byte data_size);
+    void readRegister(byte scope, byte device_addr, byte group_id, byte register_addr, byte bytesToReturn);
+    void configure();
+    void setAddresses();
+    void findMinMaxCellVolt();
+    void chooseBalanceCells();
+    void listenSerial();
+    void commReset(bool reset);
     const uint16_t crc16_table[256] = { // CRC16 for PL455 - ITU_T polynomial: x^16 + x^15 + x^2 + 1
       0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
       0xC601, 0x06C0, 0x0780, 0xC741, 0x0500, 0xC5C1, 0xC481, 0x0440,
@@ -75,6 +87,64 @@ class PL455
     byte serialRXbuffer[132];
     bool waitingForResponse = 0;
     bool sentRequest = 0;
+    unsigned long setBaud = 250000;
+    uint16_t moduleVoltages[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; //stores module voltages (raw ADC 16bit values)
+    uint16_t cellVoltages[16][16] = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, //stores cell voltages for each module (raw ADC 16bit values)
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+    uint16_t auxVoltages[16][8] = {{0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0, 0, 0, 0}};
+    uint16_t minCellVoltage = 0;
+    uint16_t maxCellVoltage = 0;
+    int16_t difCellVoltage = 0;
+    bool balanceCells[16][16] = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, //which cells have balancing enabled
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+    byte bmsStep = 0;
+    unsigned long bmsStepPeriod = 0; //microseconds
+    unsigned long bmsStepTime = 0; //microseconds
+    byte bmsSteps;
+    byte voltsRequested = 0;
 };
 
 
