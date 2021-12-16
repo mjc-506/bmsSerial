@@ -11,6 +11,7 @@
 
 #define ADDR_SIZE 0 //0 is 8 bit register addresses (TI recommended), 1 is 16 bit (used by BMW)
 #define MAX_MODULES 16 //maximum of 16 modules in a pack
+#define COMM_TIMEOUT 1000 //ms, sets an error flag if we don't recieve a response to a request in this time
 
 #define CELL_IGNORE_VOLT 5000 //ADC readings below this number will result in the cell being ignored for min and average etc calcuations. 5000 is 381mV, which should be plenty high enough to ignore disconnected cells
 #define BALANCE_TOLERANCE 26 //Balance will not be enabled for cells <2mV away from the min cell voltage. 26 is 2mV

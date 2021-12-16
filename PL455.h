@@ -143,6 +143,7 @@ class PL455
     byte bmsStep = 0;
     unsigned long bmsStepPeriod = 0; //microseconds
     unsigned long bmsStepTime = 0; //microseconds
+    elapsedMillis commTimeout;
     byte bmsSteps;
     byte voltsRequested = 0;
 };

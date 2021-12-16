@@ -252,6 +252,7 @@ void PL455::readRegister(byte scope, byte device_addr, byte group_id, byte regis
   scopeRequested = scope;
   waitingForResponse = 1;
   sentRequest = 1;
+  commTimeout = 0;
 }
 
 void PL455::init(uint32_t bmsbaud) { //'bmsbaud' sets the baud once running - the first frame is always 250000baud.
@@ -317,6 +318,7 @@ void PL455::init(uint32_t bmsbaud) { //'bmsbaud' sets the baud once running - th
       writeRegister(SCOPE_SINGLE, numModules-1, 0x10, commdata, 2);
       break;
   }
+  commTimeout = 0;
 }
 
 void PL455::configure() {
@@ -444,6 +446,7 @@ void PL455::serialEvent1() { //captures all the serial RX
           waitingForResponse = 0;
           rxInProgress = 0;
           bytesToReceive = 0;
+          commTimeout = 0;
         } else { //void
           rxInProgress = 0;
           bytesToReceive = 0;
@@ -456,6 +459,10 @@ void PL455::serialEvent1() { //captures all the serial RX
 
 void PL455::runBMS() { //called frequently from main()
   PL455::listenSerial();
+  if (commTimeout > COMM_TIMEOUT) { //no response
+    CONSOLE.println("ERROR: comms timeout?");
+    commTimeout = 500; //don't spam the console
+  }
   if (micros() - bmsStepPeriod > bmsStepTime) {
     if (bmsStep == 0) { //first step - turn off balancing
       byte balanceDisable[2] = {0, 0};

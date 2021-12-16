@@ -58,7 +58,7 @@ void setup() {
   delay(2000);
   CONSOLE.println("Serial BMS test\n\nUsing bq76PL455A\n");
   bms.init(1000000); //1Mbaud
-  report = 0; //reset report counter for we get a few bms results before trying to print status...
+  report = 0; //reset report counter so we get a few bms results before trying to print status...
 }
 
 void loop() {
