@@ -6,10 +6,10 @@ elapsedMillis report;
 
 void setup() {
   CONSOLE.begin(9600); //for console
-  delay(4000);
+  delay(2000);
   CONSOLE.println("Serial BMS test\n\nUsing bq76PL455A\n");
-  delay(1000);
-  bms.init(250000);
+  delay(500);
+  bms.init(1000000);
   report = 0;
 }
 
@@ -19,7 +19,13 @@ void loop() {
     report = report - REPORTING_PERIOD;
     CONSOLE.print("Modules: ");
     CONSOLE.print(bms.getNumModules());
-    CONSOLE.print(", Min cell voltage: ");
+    CONSOLE.print(", Pack voltage: ");
+    unsigned long packVolts = 0;
+    for (byte module=0; module<bms.getNumModules(); module++) {
+      packVolts = packVolts + bms.getModuleVoltage(module);
+    }
+    CONSOLE.print(float(packVolts)/100, min(VOLTS_DECIMALS, 2));
+    CONSOLE.print("V, Min cell voltage: ");
     CONSOLE.print(float(bms.getMinCellVoltage())/10000,VOLTS_DECIMALS);
     CONSOLE.print("V, Imbalance: ");
     CONSOLE.print(float(bms.getDifCellVoltage())/10,1);
@@ -28,7 +34,7 @@ void loop() {
       CONSOLE.print("Module ");
       CONSOLE.print(module+1);
       CONSOLE.print(" - Voltage: ");
-      CONSOLE.print(float(bms.getModuleVoltage(module))/100, VOLTS_DECIMALS-2);
+      CONSOLE.print(float(bms.getModuleVoltage(module))/100, min(VOLTS_DECIMALS, 2));
       CONSOLE.println("V.");
       for (unsigned int cell=0; cell<16; cell++) {
         CONSOLE.print("Cell");

@@ -321,23 +321,14 @@ void PL455::init(uint32_t bmsbaud) { //'bmsbaud' sets the baud once running - th
 
 void PL455::configure() {
   writeRegister(SCOPE_BRDCST, 0, 0x07, REG07, 1);
-  delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x0D, REG0D, 1);
-  delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x0E, REG0E, 1);
-  delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x0F, REG0F, 1);
-  delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x13, REG13, 1);
-  delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x1E, REG1E, 2);
-  delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x28, REG28, 1);
-  delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x32, REG32, 1);
-  delay(10);
   writeRegister(SCOPE_BRDCST, 0, 0x03, REG03, 4);
-  delay(10);
 }
 
 int PL455::getNumModules() {
@@ -410,7 +401,7 @@ void PL455::send_Frame(byte *message, int messageLength) {
   }
 //  CONSOLE.println();
   BMS.flush();
-  delay(1);
+//  delay(1);
 }
 
 void PL455::listenSerial() {
