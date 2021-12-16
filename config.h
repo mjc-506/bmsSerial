@@ -5,7 +5,6 @@
 #ifndef CONFIGH
 #define CONFIGH
 
-
 #define CONSOLE Serial
 #define BMS Serial1
 
@@ -25,10 +24,12 @@
 #define VOLTS_DECIMALS 3 //decimal points used for voltage reporting
 #define TEMP_DECIMALS 1
 
-#define SOC_LOW 10 //10% SOC at low voltage
+#define SOC_LOW_PERCENT 10 //10% SOC at low voltage
 #define SOC_LOW_ADC 40632 //10% SOC at 3100mV
-#define SOC_HIGH 90
+#define SOC_HIGH_PERCENT 90
 #define SOC_HIGH_ADC 53739 //90% SOC at 4100mv
 #define MODULE_mAH 34000 //34Ah modules
+
+#define UPS_VOLT_READ_PERIOD 500 //ms
 
 #endif //CONFIGH

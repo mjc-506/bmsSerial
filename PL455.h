@@ -153,10 +153,4 @@ class PL455
     byte SOC = 0;
 };
 
-
-
-
-
-
-
 #endif //bq76PL455Ah

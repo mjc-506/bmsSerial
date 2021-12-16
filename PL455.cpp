@@ -152,7 +152,7 @@ byte PL455::getSOC() {
 }
 
 void PL455::setSOC() {
-  SOC = map(minCellVoltage, SOC_LOW_ADC, SOC_HIGH_ADC, SOC_LOW, SOC_HIGH);
+  SOC = map(minCellVoltage, SOC_LOW_ADC, SOC_HIGH_ADC, SOC_LOW_PERCENT, SOC_HIGH_PERCENT);
 }
 
 byte PL455::getInitFrame(byte _readWrite, byte scope, byte data_size) {
@@ -390,7 +390,7 @@ void PL455::setAddresses() {
   elapsedMillis timeout;
   byte checkModule = 0;
   while(timeout < 1000) { //allow 1000ms for each module to respond. This should be more than enough!!!
-    PL455:listenSerial();
+    PL455::listenSerial();
     if ((!sentRequest) && (checkModule != MAX_MODULES)) { //haven't sent our request yet, but don't ask for addresses > 15 (16th module)
       readRegister(SCOPE_SINGLE, checkModule, 0, 0x0A, 1); //read address of module
       timeout = 0; //don't include time taken to send request
@@ -449,7 +449,7 @@ void PL455::send_Frame(byte *message, int messageLength) {
 }
 
 void PL455::listenSerial() {
-  PL455:serialEvent1();
+  PL455::serialEvent1();
 }
 
 void PL455::serialEvent1() { //captures all the serial RX
