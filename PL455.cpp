@@ -9,9 +9,9 @@
 #include "Arduino.h"
 #include "PL455.h"
 
-//PL455 register settings
+//PL455 register settings, stored here as LSByte first
 const byte REG03[4] = { 0b00000010, 0b11111111, 0b11111111, 0b11111111}; //sample all cells, all aux, and vmodule
-const byte REG07[1] = { 0b01111000}; //sample multiple times on same channel, 12.6us sampling, no averaging
+const byte REG07[1] = { 0b01111011}; //sample multiple times on same channel, 12.6us sampling, 8x oversample (recommended by TI)
 const byte REG0C[1] = { 0b00001000}; //start autoaddressing
 const byte REG0D[1] = { 16}; //16 battery cells
 const byte REG0E[1] = { 0b00011001}; //internal reg enabled, addresses set by autoaddressing, comparators disabled, hysteresis disabled, faults unlatched
@@ -20,6 +20,8 @@ const byte REG13[1] = { 0b10001000}; //balance continues up to 1 second followin
 const byte REG1E[2] = { 0b00000001, 0b00000000}; //enable module voltage readings
 const byte REG28[1] = { 0x55}; //shutdown module 5 seconds after last comm
 const byte REG32[1] = { 0b00000000}; //automonitor off
+const byte REG3E[1] = { 0xCD}; //ADC sample period (60usec  - 0xBB, recommended by TI, but BMW set 0xCD);
+const byte REG3F[4] = { 0x44, 0x44, 0x44, 0x44}; //AUX ADC sample period 12.6usec (recommended by TI);
 
 //PL455::PL455(bmsbaud) {
 //  //init(bmsbaud); //don't init in the constructor - called before setup()
@@ -331,6 +333,8 @@ void PL455::configure() {
   writeRegister(SCOPE_BRDCST, 0, 0x28, REG28, 1);
   writeRegister(SCOPE_BRDCST, 0, 0x32, REG32, 1);
   writeRegister(SCOPE_BRDCST, 0, 0x03, REG03, 4);
+  writeRegister(SCOPE_BRDCST, 0, 0x3E, REG3E, 1);
+  writeRegister(SCOPE_BRDCST, 0, 0x3F, REG3F, 4);
 }
 
 int PL455::getNumModules() {
