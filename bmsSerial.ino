@@ -4,17 +4,7 @@
 PL455 bms;
 elapsedMillis report;
 
-void setup() {
-  CONSOLE.begin(9600); //for console
-  delay(2000);
-  CONSOLE.println("Serial BMS test\n\nUsing bq76PL455A\n");
-  delay(500);
-  bms.init(1000000);
-  report = 0;
-}
-
-void loop() {
-  bms.runBMS();
+void runReport() {
   if (report > REPORTING_PERIOD) {
     report = report - REPORTING_PERIOD;
     CONSOLE.print("Modules: ");
@@ -61,4 +51,17 @@ void loop() {
       CONSOLE.println();
     }
   }
+}
+
+void setup() {
+  CONSOLE.begin(9600); //for console
+  delay(2000);
+  CONSOLE.println("Serial BMS test\n\nUsing bq76PL455A\n");
+  bms.init(1000000); //1Mbaud
+  report = 0; //reset report counter for we get a few bms results before trying to print status...
+}
+
+void loop() {
+  bms.runBMS();
+  runReport();
 }
