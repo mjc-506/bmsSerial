@@ -117,6 +117,14 @@ uint16_t PL455::getDifCellVoltage() {
 //  return difCellVoltage;
 }
 
+byte PL455::getSOC() {
+  return SOC;
+}
+
+void PL455::setSOC() {
+  SOC = map(minCellVoltage, SOC_LOW_ADC, SOC_HIGH_ADC, SOC_LOW, SOC_HIGH);
+}
+
 byte PL455::getInitFrame(byte _readWrite, byte scope, byte data_size) {
   byte initFrame=0; //variables for the initialization frame
   byte _data_size = 0; //bits 2 - 0
@@ -468,6 +476,7 @@ void PL455::runBMS() { //called frequently from main()
     commTimeout = 500; //don't spam the console
   }
   if (micros() - bmsStepPeriod > bmsStepTime) {
+    PL455::setSOC();
     if (bmsStep == 0) { //first step - turn off balancing
       byte balanceDisable[2] = {0, 0};
       PL455::writeRegister(SCOPE_BRDCST, numModules-1, 0x14, balanceDisable, 2);

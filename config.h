@@ -24,4 +24,10 @@
 #define REPORTING_PERIOD 1000 //milliseconds - you get an status output this frequently.
 #define VOLTS_DECIMALS 3 //decimal points used for voltage reporting
 
+#define SOC_LOW 10 //10% SOC at low voltage
+#define SOC_LOW_ADC 40632 //10% SOC at 3100mV
+#define SOC_HIGH 90
+#define SOC_HIGH_ADC 53739 //90% SOC at 4100mv
+#define MODULE_mAH 34000 //34Ah modules
+
 #endif //CONFIGH

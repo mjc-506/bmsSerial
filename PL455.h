@@ -30,6 +30,7 @@ class PL455
     uint16_t getDifCellVoltage();
     void runBMS();
     bool getBalanceStatus(byte module, byte cell);
+    byte getSOC();
   private:
     uint16_t CRC16(byte *pBuf, int nLen);
     byte getInitFrame(byte _readWrite, byte scope, byte data_size);
@@ -43,6 +44,7 @@ class PL455
     void chooseBalanceCells();
     void listenSerial();
     void commReset(bool reset);
+    void setSOC();
     const uint16_t crc16_table[256] = { // CRC16 for PL455 - ITU_T polynomial: x^16 + x^15 + x^2 + 1
       0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
       0xC601, 0x06C0, 0x0780, 0xC741, 0x0500, 0xC5C1, 0xC481, 0x0440,
@@ -146,6 +148,7 @@ class PL455
     elapsedMillis commTimeout;
     byte bmsSteps;
     byte voltsRequested = 0;
+    byte SOC = 0;
 };
 
 
