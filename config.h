@@ -23,6 +23,7 @@
 
 #define REPORTING_PERIOD 1000 //milliseconds - you get an status output this frequently.
 #define VOLTS_DECIMALS 3 //decimal points used for voltage reporting
+#define TEMP_DECIMALS 1
 
 #define SOC_LOW 10 //10% SOC at low voltage
 #define SOC_LOW_ADC 40632 //10% SOC at 3100mV

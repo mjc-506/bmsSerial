@@ -89,6 +89,36 @@ uint16_t PL455::adc2volt(uint16_t adcReading) { //converts ADC readings into vol
   return uint16_t(voltage);
 }
 
+float PL455::adc2temp(uint16_t adcReading) { //converts ADC readings into temperature, degC
+  const float To = 290;
+  const float Ro = 150;
+  const float Rfix = 245;
+  const float B = 1000;
+  float R = (adcReading*Rfix)/(65535-adcReading);
+  float invTemp = (1/To) + (1/B)*log(R/Ro);
+  float temperature = (1/invTemp)-273;
+  return float(temperature);
+}
+
+float PL455::getTemperature(byte module, byte sensor) {
+  int aux = 0;
+  switch (sensor) {
+    case 0:
+      aux = 0;
+      break;
+    case 1:
+      aux = 2;
+      break;
+    case 2:
+      aux = 1;
+      break;
+    default:
+      aux = 0;
+      break;
+  }
+  return (PL455::adc2temp(auxVoltages[module][aux]));
+}
+
 uint16_t PL455::getModuleVoltage(byte module) { //provides the overall voltage of the chosen module, in hundredths of a volt
   uint16_t moduleADC = moduleVoltages[module];
   uint32_t moduleVolts = (uint32_t(12500) * uint32_t(moduleADC)) / uint32_t(65535);

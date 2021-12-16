@@ -47,14 +47,22 @@ void runReport() {
         CONSOLE.print(bms.getBalanceStatus(module, cell));
       }
       CONSOLE.println();
-      CONSOLE.println();
-      CONSOLE.print("Pack SOC: ");
-      CONSOLE.print(bms.getSOC());
-      CONSOLE.print("% (based on lowest cell voltage)  est. kWh remaining: ");
-      CONSOLE.print((float(bms.getSOC() - SOC_LOW)/100.0) * float(bms.getNumModules()) * float(MODULE_mAH/1000) * (float(packVolts)/100.0) / 1000);
-      CONSOLE.println("kWh");
+      CONSOLE.print("Temperatures: 1 - ");
+      CONSOLE.print(bms.getTemperature(module, 0), TEMP_DECIMALS);
+      CONSOLE.print(" \xC2\xB0""C  2 - ");
+      CONSOLE.print(bms.getTemperature(module, 1), TEMP_DECIMALS);
+      CONSOLE.print(" \xC2\xB0""C  3 - ");
+      CONSOLE.print(bms.getTemperature(module, 2), TEMP_DECIMALS);
+      CONSOLE.println(" \xC2\xB0""C");
       CONSOLE.println();
     }
+    CONSOLE.print("Pack SOC: ");
+    CONSOLE.print(bms.getSOC());
+    CONSOLE.print("% (based on lowest cell voltage)  est. kWh remaining: ");
+    CONSOLE.print((float(bms.getSOC() - SOC_LOW)/100.0) * float(bms.getNumModules()) * float(MODULE_mAH/1000) * (float(packVolts)/100.0) / 1000);
+    CONSOLE.println("kWh");
+    CONSOLE.println();
+    CONSOLE.println();
   }
 }
 

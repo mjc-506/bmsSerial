@@ -31,10 +31,12 @@ class PL455
     void runBMS();
     bool getBalanceStatus(byte module, byte cell);
     byte getSOC();
+    float getTemperature(byte module, byte sensor);
   private:
     uint16_t CRC16(byte *pBuf, int nLen);
     byte getInitFrame(byte _readWrite, byte scope, byte data_size);
     uint16_t adc2volt(uint16_t adcReading);
+    float adc2temp(uint16_t adcReading);
     void send_Frame(byte *message, int messageLength);
     void writeRegister(byte scope, byte device_addr, byte register_addr, byte *data, byte data_size);
     void readRegister(byte scope, byte device_addr, byte group_id, byte register_addr, byte bytesToReturn);
