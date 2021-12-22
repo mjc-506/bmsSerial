@@ -448,11 +448,7 @@ void PL455::send_Frame(byte *message, int messageLength) {
 //  delay(1);
 }
 
-void PL455::listenSerial() {
-  PL455::serialEvent1();
-}
-
-void PL455::serialEvent1() { //captures all the serial RX
+void PL455::listenSerial() {//captures all the serial RX
   while(BMS.available() > 0)
   {
     byte inByte = BMS.read();
@@ -540,23 +536,23 @@ void PL455::runBMS() { //called frequently from main()
           //update data
           PL455::findMinMaxCellVolt();
           PL455::chooseBalanceCells();
+          //turn balancing back on
+          for (unsigned int module=0; module<numModules; module++) {
+            byte balanceEnable[2] = {0, 0};
+            for (unsigned int cell=0; cell<8; cell++) {
+              balanceEnable[0] = balanceEnable[0] | (balanceCells[module][cell] << cell);
+            }
+            for (unsigned int cell=8; cell<16; cell++) {
+              balanceEnable[1] = balanceEnable[1] | (balanceCells[module][cell] << (cell-8));
+            }
+            PL455::writeRegister(SCOPE_SINGLE, module, 0x14, balanceEnable, 2);
+          }
           //reset flags
           bmsStepTime = micros();
           bmsStep++;
         } else {
           PL455::readRegister(SCOPE_SINGLE, voltsRequested, 0, 0x02, 1);
           voltsRequested++; //don't reset the step timer - make sure this happens as quick as possible
-        }
-        //turn balancing back on
-        for (unsigned int module=0; module<numModules; module++) {
-          byte balanceEnable[2] = {0, 0};
-          for (unsigned int cell=0; cell<8; cell++) {
-            balanceEnable[0] = balanceEnable[0] | (balanceCells[module][cell] << cell);
-          }
-          for (unsigned int cell=8; cell<16; cell++) {
-            balanceEnable[1] = balanceEnable[1] | (balanceCells[module][cell] << cell);
-          }
-          PL455::writeRegister(SCOPE_SINGLE, module, 0x14, balanceEnable, 2);
         }
       }
     } else { //other steps, keep balancing on
@@ -566,7 +562,7 @@ void PL455::runBMS() { //called frequently from main()
           balanceEnable[0] = balanceEnable[0] | (balanceCells[module][cell] << cell);
         }
         for (unsigned int cell=8; cell<16; cell++) {
-          balanceEnable[1] = balanceEnable[1] | (balanceCells[module][cell] << cell);
+          balanceEnable[1] = balanceEnable[1] | (balanceCells[module][cell] << (cell-8));
         }
         PL455::writeRegister(SCOPE_SINGLE, module, 0x14, balanceEnable, 2);
       }
