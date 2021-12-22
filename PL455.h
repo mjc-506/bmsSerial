@@ -21,7 +21,6 @@ class PL455
   public:
 //    PL455;
     void init(uint32_t bmsbaud);
-    void serialEvent1();
     uint16_t getModuleVoltage(byte module);
     uint16_t getCellVoltage(byte module, byte cell);
     uint16_t getAuxVoltage(byte module, byte aux);

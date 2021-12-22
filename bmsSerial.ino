@@ -59,7 +59,7 @@ void runReport() {
     CONSOLE.print("Pack SOC: ");
     CONSOLE.print(bms.getSOC());
     CONSOLE.print("% (based on lowest cell voltage)  est. kWh remaining: ");
-    CONSOLE.print((float(bms.getSOC() - SOC_LOW)/100.0) * float(bms.getNumModules()) * float(MODULE_mAH/1000) * (float(packVolts)/100.0) / 1000);
+    CONSOLE.print((float(bms.getSOC() - SOC_LOW_PERCENT)/100.0) * float(bms.getNumModules()) * float(MODULE_mAH/1000) * (float(packVolts)/100.0) / 1000);
     CONSOLE.println("kWh");
     CONSOLE.println();
     CONSOLE.println();
