@@ -348,7 +348,7 @@ void PL455::init(uint32_t bmsbaud) { //'bmsbaud' sets the baud once running - th
       writeRegister(SCOPE_SINGLE, 0, 0x10, commdata, 2);
       break;
     default: // more than one module
-      commdata[0] = 0b1100000; //enable UART and high side comms, not fault - first module
+      commdata[0] = 0b11000000; //enable UART and high side comms, not fault - first module
       writeRegister(SCOPE_SINGLE, 0, 0x10, commdata, 2);
       for (int i=1; i<numModules-1; i++) {
         commdata[0] = 0b01100000; //enable high and low side comms, not fault, disable UART - middle modules
