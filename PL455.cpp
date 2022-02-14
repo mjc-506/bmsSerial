@@ -91,9 +91,9 @@ uint16_t PL455::adc2volt(uint16_t adcReading) { //converts ADC readings into vol
 
 float PL455::adc2temp(uint16_t adcReading) { //converts ADC readings into temperature, degC
   const float To = 290;
-  const float Ro = 150;
-  const float Rfix = 245;
-  const float B = 1000;
+  const float Ro = 100000;
+  const float Rfix = 150000;
+  const float B = 3950;
   float R = (adcReading*Rfix)/(65535-adcReading);
   float invTemp = (1/To) + (1/B)*log(R/Ro);
   float temperature = (1/invTemp)-273;
